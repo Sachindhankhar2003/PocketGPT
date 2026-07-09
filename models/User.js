@@ -10,10 +10,16 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  name: {
+    type: String,
+    default: ''
+  },
+  totalDocsUploaded: {
+    type: Number,
+    default: 0
   }
+}, {
+  timestamps: true
 });
 
 module.exports = mongoose.model('User', UserSchema);

@@ -139,7 +139,7 @@ function openRouterRequest(apiKey, body) {
 // SEND MESSAGE
 router.post('/:id/message', auth, async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content, model: requestedModel } = req.body;
 
     let chat = await Chat.findOne({
       _id: req.params.id,
@@ -148,9 +148,10 @@ router.post('/:id/message', auth, async (req, res) => {
 
     if (!chat) return res.status(404).json({ msg: 'Chat not found' });
 
-    // first message title
-    if (chat.messages.length === 0) {
-      chat.title = content.substring(0, 30) + (content.length > 30 ? '...' : '');
+    // first message title (will be replaced by AI-generated title after response)
+    const isFirstMessage = chat.messages.length === 0;
+    if (isFirstMessage) {
+      chat.title = content.substring(0, 40) + (content.length > 40 ? '...' : '');
     }
 
     // save user message
@@ -199,15 +200,17 @@ router.post('/:id/message', auth, async (req, res) => {
       return res.status(500).json({ msg: 'API key not configured' });
     }
 
-    // AI CALL - try multiple models as fallback
-    const modelsToTry = [
-      'openrouter/free', // Meta-router that automatically selects a working free model
-      'google/gemma-4-31b-it:free',
-      'google/gemma-3-27b:free',
-      'qwen/qwen-3-72b-instruct:free',
-      'mistralai/mistral-small-instruct:free',
-      'google/gemma-2-9b-it:free',
-    ];
+    // Use requested model or fall back through free models
+    const modelsToTry = requestedModel && requestedModel !== 'auto'
+      ? [requestedModel, 'google/gemma-3-27b:free', 'mistralai/mistral-small-instruct:free']
+      : [
+          'openrouter/free',
+          'google/gemma-4-31b-it:free',
+          'google/gemma-3-27b:free',
+          'qwen/qwen-3-72b-instruct:free',
+          'mistralai/mistral-small-instruct:free',
+          'google/gemma-2-9b-it:free',
+        ];
 
     let data = null;
     let lastError = 'No models responded successfully';
@@ -273,10 +276,33 @@ To get real AI-generated responses, please configure a valid \`OPENROUTER_API_KE
       content: aiReply
     });
 
+    // Track which model was used
+    if (requestedModel && requestedModel !== 'auto') {
+      chat.model = requestedModel;
+    }
+
+    // Generate a smart title after the first exchange
+    if (isFirstMessage) {
+      try {
+        const titleData = await openRouterRequest(apiKey, {
+          model: modelsToTry[0],
+          messages: [
+            { role: 'user', content: `Summarize this chat topic in 5 words or less, no punctuation, no quotes:\n\nUser: ${content}\nAssistant: ${aiReply.substring(0, 200)}` }
+          ],
+          max_tokens: 20
+        });
+        if (titleData?.choices?.[0]?.message?.content) {
+          chat.title = titleData.choices[0].message.content.trim().replace(/["']/g, '');
+        }
+      } catch (e) {
+        // Keep the fallback title from message content
+      }
+    }
+
     await chat.save();
 
     // send response as JSON
-    res.json({ reply: aiReply });
+    res.json({ reply: aiReply, title: chat.title });
 
   } catch (err) {
     console.error('Chat message error:', err.message);

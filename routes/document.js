@@ -4,6 +4,7 @@ const multer = require('multer');
 const { PDFParse } = require('pdf-parse');
 const auth = require('../middleware/auth');
 const Chat = require('../models/Chat');
+const User = require('../models/User');
 
 // Set up Multer for memory storage
 const storage = multer.memoryStorage();
@@ -48,7 +49,11 @@ router.post('/upload/:chatId', auth, upload.single('document'), async (req, res)
 
     // Store in systemContext field
     chat.systemContext = (chat.systemContext || '') + contextAttachment;
+    chat.docsUploaded = (chat.docsUploaded || 0) + 1;
     await chat.save();
+
+    // Increment user's global doc counter
+    await User.findByIdAndUpdate(req.user.id, { $inc: { totalDocsUploaded: 1 } });
 
     res.json({ msg: 'Document processed and context added to chat', title: req.file.originalname });
   } catch (err) {

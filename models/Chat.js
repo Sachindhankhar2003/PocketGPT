@@ -20,7 +20,7 @@ const ChatSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: false // Optional for anonymous users if we allow them
+    required: false
   },
   title: {
     type: String,
@@ -28,17 +28,19 @@ const ChatSchema = new mongoose.Schema({
   },
   messages: [MessageSchema],
   systemContext: {
-    type: String,   // E.g., Document text parsed
+    type: String,
     default: ''
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  model: {
+    type: String,
+    default: 'auto'
   },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  docsUploaded: {
+    type: Number,
+    default: 0
   }
+}, {
+  timestamps: true  // Adds createdAt and updatedAt automatically
 });
 
 module.exports = mongoose.model('Chat', ChatSchema);
